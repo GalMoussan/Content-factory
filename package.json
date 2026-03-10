@@ -1,0 +1,22 @@
+{
+  "name": "content-factory",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Multi-agent autonomous YouTube content creation system",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:client": "vite client",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "tsc -p server/tsconfig.json",
+    "build:client": "vite build client",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --ext .ts,.tsx",
+    "pipeline": "tsx scripts/run-pipeline.ts",
+    "pipeline:cron": "tsx scripts/cron-scheduler.ts"
+  }
+}
