@@ -41,11 +41,22 @@ function makeInMemoryDb(): Database.Database {
 // ---------------------------------------------------------------------------
 describe('T003 — Database Initialization', () => {
   // Acceptance: "Database initializes with WAL mode, busy_timeout=5000, foreign_keys=ON"
-  it('should enable WAL journal mode on initialization', () => {
-    const db = new Database(':memory:');
-    initDb(db);
-    const row = db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
-    expect(row.journal_mode).toBe('wal');
+  it('should enable WAL journal mode on initialization', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const tmpFile = path.join(os.tmpdir(), `cf-test-${Date.now()}.db`);
+    const db = new Database(tmpFile);
+    try {
+      initDb(db);
+      const row = db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
+      expect(row.journal_mode).toBe('wal');
+    } finally {
+      db.close();
+      fs.unlinkSync(tmpFile);
+      try { fs.unlinkSync(tmpFile + '-wal'); } catch { /* ignore */ }
+      try { fs.unlinkSync(tmpFile + '-shm'); } catch { /* ignore */ }
+    }
   });
 
   it('should enable foreign keys pragma', () => {

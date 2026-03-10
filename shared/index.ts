@@ -1,3 +1,3 @@
 // Barrel export for shared schemas and types
-// Schemas will be added by T002
-export {};
+export * from './schemas/index.js';
+export * from './types/index.js';
