@@ -16,8 +16,9 @@
     },
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "declaration": true
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["server/src", "client/src", "shared", "scripts"],
-  "exclude": ["node_modules", "dist", "build"]
+  "include": ["server/src", "client/src", "shared", "scripts", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", "build", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
 }
