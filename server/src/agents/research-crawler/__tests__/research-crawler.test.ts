@@ -1,15 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { ResearchDossierSchema, ScoredTopicListSchema } from '@shared/schemas';
 import { ResearchCrawlerAgent } from '../index';
 import { selectTopTopic } from '../topic-selector';
-import { scrapeWebPage } from '../web-scraper';
+import { scrapeWebPage, scrapeUrls } from '../web-scraper';
 import { analyzeCompetitors } from '../competitor-analyzer';
 import { buildDossier } from '../dossier-builder';
 import type { AgentContext } from '@shared/types/agent';
 import type { ScoredTopic, ScoredTopicList } from '@shared/schemas';
 
 // T008 — ResearchCrawler Agent
-// Tests will fail at import until research-crawler modules are implemented.
+// Top-level auto-mocks — all exports become vi.fn(). Unit test describes
+// restore real implementations via vi.importActual. Lifecycle tests configure
+// mock return values in beforeEach.
+vi.mock('../web-scraper');
+vi.mock('../competitor-analyzer');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -98,6 +102,11 @@ describe('T008 — selectTopTopic', () => {
 // Web Scraper
 // ---------------------------------------------------------------------------
 describe('T008 — scrapeWebPage', () => {
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../web-scraper')>('../web-scraper');
+    vi.mocked(scrapeWebPage).mockImplementation(actual.scrapeWebPage);
+  });
+
   // Acceptance: "Scrapes web pages using Playwright (headless)"
   it('should extract title and text content from an HTML page', async () => {
     // Mock Playwright browser
@@ -159,6 +168,11 @@ describe('T008 — scrapeWebPage', () => {
 // Competitor Analyzer
 // ---------------------------------------------------------------------------
 describe('T008 — analyzeCompetitors', () => {
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../competitor-analyzer')>('../competitor-analyzer');
+    vi.mocked(analyzeCompetitors).mockImplementation(actual.analyzeCompetitors);
+  });
+
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -240,6 +254,19 @@ describe('T008 — buildDossier', () => {
 // Full agent lifecycle
 // ---------------------------------------------------------------------------
 describe('T008 — ResearchCrawlerAgent lifecycle', () => {
+  beforeEach(() => {
+    vi.mocked(scrapeWebPage).mockReset();
+    vi.mocked(scrapeUrls).mockReset();
+    vi.mocked(analyzeCompetitors).mockReset();
+    // Default mock setup for lifecycle tests
+    vi.mocked(scrapeUrls).mockResolvedValue([
+      { url: 'https://openai.com/blog/gpt-5', title: 'GPT-5 Blog', excerpt: 'GPT-5 is out...', scrapedAt: new Date().toISOString() },
+    ]);
+    vi.mocked(analyzeCompetitors).mockResolvedValue([
+      { videoId: 'yt1', title: 'GPT-5 Review', channelName: 'AI Explained', viewCount: 500000, publishedAt: new Date().toISOString(), gaps: [] },
+    ]);
+  });
+
   function makeCtx(): AgentContext {
     return {
       runId: 'run-research-001',
@@ -259,17 +286,6 @@ describe('T008 — ResearchCrawlerAgent lifecycle', () => {
 
   // Acceptance: "Output validates against ResearchDossierSchema"
   it('should write a research.json that validates against ResearchDossierSchema', async () => {
-    vi.mock('../web-scraper', () => ({
-      scrapeUrls: vi.fn().mockResolvedValue([
-        { url: 'https://openai.com/blog/gpt-5', title: 'GPT-5 Blog', excerpt: 'GPT-5 is out...', scrapedAt: new Date().toISOString() },
-      ]),
-    }));
-    vi.mock('../competitor-analyzer', () => ({
-      analyzeCompetitors: vi.fn().mockResolvedValue([
-        { videoId: 'yt1', title: 'GPT-5 Review', channelName: 'AI Explained', viewCount: 500000, publishedAt: new Date().toISOString(), gaps: [] },
-      ]),
-    }));
-
     const agent = new ResearchCrawlerAgent();
     const ctx = makeCtx();
     const fs = await import('node:fs');
@@ -284,20 +300,17 @@ describe('T008 — ResearchCrawlerAgent lifecycle', () => {
     }
 
     fs.rmSync(ctx.runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   // Acceptance: "Tests cover happy path, partial scraping failure, and competitor analysis"
   it('should succeed when some source URLs fail to scrape', async () => {
-    vi.mock('../web-scraper', () => ({
-      scrapeUrls: vi.fn().mockResolvedValue([
-        null, // first URL failed
-        { url: 'https://openai.com/blog/gpt-5', title: 'GPT-5 Blog', excerpt: 'GPT-5 is out...', scrapedAt: new Date().toISOString() },
-      ]),
-    }));
-    vi.mock('../competitor-analyzer', () => ({
-      analyzeCompetitors: vi.fn().mockResolvedValue([]),
-    }));
+    vi.mocked(scrapeUrls).mockReset();
+    vi.mocked(scrapeUrls).mockResolvedValue([
+      null, // first URL failed
+      { url: 'https://openai.com/blog/gpt-5', title: 'GPT-5 Blog', excerpt: 'GPT-5 is out...', scrapedAt: new Date().toISOString() },
+    ]);
+    vi.mocked(analyzeCompetitors).mockReset();
+    vi.mocked(analyzeCompetitors).mockResolvedValue([]);
 
     const agent = new ResearchCrawlerAgent();
     const ctx = makeCtx();
@@ -309,6 +322,5 @@ describe('T008 — ResearchCrawlerAgent lifecycle', () => {
     expect(result.success).toBe(true);
 
     fs.rmSync(ctx.runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 });

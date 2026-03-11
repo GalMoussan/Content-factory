@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { QAResultSchema } from '@shared/schemas';
 import { QualityControllerAgent } from '../index';
 import { scoreContentBundle } from '../scorer';
@@ -8,6 +8,55 @@ import type { ContentBundle, QADimension } from '@shared/schemas';
 
 // T010 — QualityController Agent
 // Tests will fail at import until quality-controller modules are implemented.
+
+// ---------------------------------------------------------------------------
+// Hoist shared mock data so it is available when vi.mock factories execute
+// ---------------------------------------------------------------------------
+const { MOCK_DIMENSION_SCORES } = vi.hoisted(() => {
+  const MOCK_DIMENSION_SCORES: Array<{
+    dimension: string;
+    score: number;
+    feedback: string;
+    issues: string[];
+  }> = [
+    { dimension: 'script-quality', score: 82, feedback: 'Clear structure and engaging hook.', issues: [] },
+    { dimension: 'factual-accuracy', score: 78, feedback: 'Claims are supported by sources.', issues: [] },
+    { dimension: 'audio-quality', score: 85, feedback: 'Good pacing and pronunciation.', issues: [] },
+    { dimension: 'visual-quality', score: 80, feedback: 'Section transitions are smooth.', issues: [] },
+    { dimension: 'seo-optimization', score: 88, feedback: 'Strong title and tag coverage.', issues: [] },
+    { dimension: 'originality', score: 75, feedback: 'Unique developer migration angle.', issues: [] },
+  ];
+  return { MOCK_DIMENSION_SCORES };
+});
+
+// ---------------------------------------------------------------------------
+// Mock @anthropic-ai/sdk at module level using the hoisted data.
+// The mockCreate reference is shared so tests can assert on its calls.
+// ---------------------------------------------------------------------------
+const { mockCreate } = vi.hoisted(() => {
+  const mockCreate = vi.fn().mockResolvedValue({
+    content: [{
+      type: 'text',
+      text: JSON.stringify([
+        { dimension: 'script-quality', score: 82, feedback: 'Clear structure and engaging hook.', issues: [] },
+        { dimension: 'factual-accuracy', score: 78, feedback: 'Claims are supported by sources.', issues: [] },
+        { dimension: 'audio-quality', score: 85, feedback: 'Good pacing and pronunciation.', issues: [] },
+        { dimension: 'visual-quality', score: 80, feedback: 'Section transitions are smooth.', issues: [] },
+        { dimension: 'seo-optimization', score: 88, feedback: 'Strong title and tag coverage.', issues: [] },
+        { dimension: 'originality', score: 75, feedback: 'Unique developer migration angle.', issues: [] },
+      ]),
+    }],
+    usage: { input_tokens: 800, output_tokens: 400 },
+    model: 'claude-haiku-4-5',
+  });
+  return { mockCreate };
+});
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class MockAnthropic {
+    messages = { create: mockCreate };
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -33,36 +82,17 @@ const CONTENT_BUNDLE: ContentBundle = {
   producedAt: new Date().toISOString(),
 };
 
-const MOCK_DIMENSION_SCORES: QADimension[] = [
-  { dimension: 'script-quality', score: 82, feedback: 'Clear structure and engaging hook.', issues: [] },
-  { dimension: 'factual-accuracy', score: 78, feedback: 'Claims are supported by sources.', issues: [] },
-  { dimension: 'audio-quality', score: 85, feedback: 'Good pacing and pronunciation.', issues: [] },
-  { dimension: 'visual-quality', score: 80, feedback: 'Section transitions are smooth.', issues: [] },
-  { dimension: 'seo-optimization', score: 88, feedback: 'Strong title and tag coverage.', issues: [] },
-  { dimension: 'originality', score: 75, feedback: 'Unique developer migration angle.', issues: [] },
-];
-
-function makeMockClaudeHaiku(dimensionScores: QADimension[]) {
-  return vi.fn().mockImplementation(() => ({
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [{
-          type: 'tool_result',
-          content: JSON.stringify(dimensionScores),
-        }],
-        usage: { input_tokens: 800, output_tokens: 400 },
-        model: 'claude-haiku-4-5',
-      }),
-    },
-  }));
-}
-
 // ---------------------------------------------------------------------------
 // Scorer
 // ---------------------------------------------------------------------------
 describe('T010 — scoreContentBundle', () => {
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../scorer')>('../scorer');
+    vi.mocked(scoreContentBundle).mockImplementation(actual.scoreContentBundle);
+  });
+
   beforeEach(() => {
-    vi.mock('@anthropic-ai/sdk', makeMockClaudeHaiku(MOCK_DIMENSION_SCORES));
+    vi.clearAllMocks();
   });
 
   // Acceptance: "Scores all 6 dimensions via Claude API"
@@ -81,9 +111,6 @@ describe('T010 — scoreContentBundle', () => {
 
   // Acceptance: "Uses Haiku model for cost efficiency"
   it('should use the Claude Haiku model for scoring', async () => {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
-    const mockCreate = (new (Anthropic as any)()).messages.create as ReturnType<typeof vi.fn>;
-
     await scoreContentBundle(CONTENT_BUNDLE, 'FAKE_CLAUDE_KEY');
 
     const callArgs = mockCreate.mock.calls[0][0];
@@ -99,14 +126,9 @@ describe('T010 — scoreContentBundle', () => {
   });
 
   it('should throw when the Claude API call fails', async () => {
-    vi.mock('@anthropic-ai/sdk', () => ({
-      default: vi.fn().mockImplementation(() => ({
-        messages: { create: vi.fn().mockRejectedValue(new Error('Haiku overloaded')) },
-      })),
-    }));
+    mockCreate.mockRejectedValueOnce(new Error('Haiku overloaded'));
 
     await expect(scoreContentBundle(CONTENT_BUNDLE, 'FAKE_CLAUDE_KEY')).rejects.toThrow();
-    vi.restoreAllMocks();
   });
 });
 
@@ -116,51 +138,51 @@ describe('T010 — scoreContentBundle', () => {
 describe('T010 — renderVerdict', () => {
   // Acceptance: "Verdict logic correctly applies configurable thresholds"
   it('should return "approved" when overall score is >= 75', () => {
-    const result = renderVerdict(MOCK_DIMENSION_SCORES, { approveThreshold: 75, rejectThreshold: 40 });
+    const result = renderVerdict(MOCK_DIMENSION_SCORES as QADimension[], { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('approved');
     expect(result.overallScore).toBeGreaterThanOrEqual(75);
   });
 
   it('should return "rejected" when overall score is <= 40', () => {
-    const lowScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 35 }));
+    const lowScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 35 }));
     const result = renderVerdict(lowScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('rejected');
     expect(result.overallScore).toBeLessThanOrEqual(40);
   });
 
   it('should return "flagged" when overall score is between 40 and 75', () => {
-    const midScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 60 }));
+    const midScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 60 }));
     const result = renderVerdict(midScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('flagged');
   });
 
   // Acceptance: "Tests cover threshold edge cases (exactly 75, exactly 40, etc.)"
   it('should return "approved" when overall score is exactly 75', () => {
-    const exactScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 75 }));
+    const exactScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 75 }));
     const result = renderVerdict(exactScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('approved');
   });
 
   it('should return "rejected" when overall score is exactly 40', () => {
-    const exactScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 40 }));
+    const exactScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 40 }));
     const result = renderVerdict(exactScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('rejected');
   });
 
   it('should return "flagged" when score is exactly 41 (just above reject threshold)', () => {
-    const borderScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 41 }));
+    const borderScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 41 }));
     const result = renderVerdict(borderScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.verdict).toBe('flagged');
   });
 
   it('should include a non-empty verdictReason in the result', () => {
-    const result = renderVerdict(MOCK_DIMENSION_SCORES, { approveThreshold: 75, rejectThreshold: 40 });
+    const result = renderVerdict(MOCK_DIMENSION_SCORES as QADimension[], { approveThreshold: 75, rejectThreshold: 40 });
     expect(typeof result.verdictReason).toBe('string');
     expect(result.verdictReason.length).toBeGreaterThan(0);
   });
 
   it('should calculate overallScore as a weighted average across dimensions', () => {
-    const uniformScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 80 }));
+    const uniformScores: QADimension[] = (MOCK_DIMENSION_SCORES as QADimension[]).map((d) => ({ ...d, score: 80 }));
     const result = renderVerdict(uniformScores, { approveThreshold: 75, rejectThreshold: 40 });
     expect(result.overallScore).toBe(80);
   });
@@ -170,6 +192,11 @@ describe('T010 — renderVerdict', () => {
 // Full agent lifecycle
 // ---------------------------------------------------------------------------
 describe('T010 — QualityControllerAgent lifecycle', () => {
+  beforeEach(() => {
+    vi.mocked(scoreContentBundle).mockReset();
+    vi.mocked(scoreContentBundle).mockResolvedValue(MOCK_DIMENSION_SCORES as QADimension[]);
+  });
+
   function makeCtx(runDir: string): AgentContext {
     return {
       runId: 'run-qa-001',
@@ -255,10 +282,10 @@ describe('T010 — QualityControllerAgent lifecycle', () => {
 
   // Acceptance: "Tests cover approved, rejected, and flagged verdicts"
   it('should produce a rejected verdict when all dimension scores are very low', async () => {
-    const lowScores: QADimension[] = MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 25 }));
-    vi.mock('../scorer', () => ({
-      scoreContentBundle: vi.fn().mockResolvedValue(lowScores),
-    }));
+    vi.mocked(scoreContentBundle).mockReset();
+    vi.mocked(scoreContentBundle).mockResolvedValue(
+      MOCK_DIMENSION_SCORES.map((d) => ({ ...d, score: 25 })) as QADimension[],
+    );
 
     const runDir = '/tmp/run-qa-rejected';
     const agent = new QualityControllerAgent();

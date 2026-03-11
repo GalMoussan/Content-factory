@@ -8,6 +8,8 @@ build/
 coverage/
 .vite/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 queue/data/
 test-results/

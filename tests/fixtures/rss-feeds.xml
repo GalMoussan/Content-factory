@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>AI Tech News</title>
+    <link>https://example.com/ai-news</link>
+    <description>Latest AI and tech news</description>
+    <item>
+      <title>Top 5 AI Tools for Developers in 2026</title>
+      <link>https://example.com/top-5-ai-tools</link>
+      <description>A roundup of the best AI coding assistants available today.</description>
+      <pubDate>Mon, 09 Mar 2026 08:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>How LLMs Are Changing Software Engineering</title>
+      <link>https://example.com/llms-software-eng</link>
+      <description>Large language models are transforming how developers write code.</description>
+      <pubDate>Sun, 08 Mar 2026 12:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

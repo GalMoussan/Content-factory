@@ -20,5 +20,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["server/src", "client/src", "shared", "scripts", "vitest.config.ts"],
-  "exclude": ["node_modules", "dist", "build", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": ["node_modules", "dist", "build", "remotion", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
 }

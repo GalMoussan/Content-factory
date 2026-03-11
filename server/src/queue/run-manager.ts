@@ -16,22 +16,74 @@ export function writeRunMeta(runDir: string, meta: Record<string, unknown>): voi
   writeQueueFileAtomic(runDir, '_meta.json', meta);
 }
 
+interface MoveToDeadLetterOptions {
+  readonly agentName: string;
+  readonly retryAttempts: number;
+  readonly dataDir: string;
+  readonly deadLetterDir: string;
+}
+
 /**
- * Move a run directory to the dead-letter directory and add _error.json.
+ * Move a failed run directory to the dead-letter queue and annotate with error info.
+ * Supports two call signatures:
+ *   moveToDeadLetter(srcDir, runId, errorMessage, deadLetterDir)  — legacy
+ *   moveToDeadLetter(runId, error, options)                        — new
  */
 export function moveToDeadLetter(
-  runDir: string,
-  runId: string,
-  errorMessage: string,
-  deadLetterDir: string,
+  srcDirOrRunId: string,
+  runIdOrError: string | Error,
+  errorMsgOrOptions: string | MoveToDeadLetterOptions,
+  deadLetterDirLegacy?: string,
 ): void {
-  const destDir = path.join(deadLetterDir, runId);
-  fs.mkdirSync(deadLetterDir, { recursive: true });
-  fs.renameSync(runDir, destDir);
-  writeQueueFileAtomic(destDir, '_error.json', {
-    message: errorMessage,
-    movedAt: new Date().toISOString(),
-  });
+  if (typeof errorMsgOrOptions === 'string' && deadLetterDirLegacy) {
+    // Legacy: moveToDeadLetter(srcDir, runId, errorMessage, deadLetterDir)
+    const srcDir = srcDirOrRunId;
+    const runId = runIdOrError as string;
+    const errorMessage = errorMsgOrOptions;
+    const deadLetterDir = deadLetterDirLegacy;
+
+    const destDir = path.join(deadLetterDir, runId);
+    fs.mkdirSync(deadLetterDir, { recursive: true });
+    fs.renameSync(srcDir, destDir);
+
+    const errorAnnotation = {
+      message: errorMessage,
+      timestamp: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(
+      path.join(destDir, '_error.json'),
+      JSON.stringify(errorAnnotation, null, 2),
+      'utf8',
+    );
+  } else {
+    // New: moveToDeadLetter(runId, error, options)
+    const runId = srcDirOrRunId;
+    const error = runIdOrError as Error;
+    const options = errorMsgOrOptions as MoveToDeadLetterOptions;
+    const { agentName, retryAttempts, dataDir, deadLetterDir } = options;
+    const srcDir = path.join(dataDir, `run-${runId}`);
+    const destDir = path.join(deadLetterDir, `run-${runId}`);
+
+    fs.mkdirSync(deadLetterDir, { recursive: true });
+    fs.renameSync(srcDir, destDir);
+
+    const errorAnnotation = {
+      agentName,
+      retryAttempts,
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(
+      path.join(destDir, '_error.json'),
+      JSON.stringify(errorAnnotation, null, 2),
+      'utf8',
+    );
+  }
 }
 
 /**

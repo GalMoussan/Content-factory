@@ -1,0 +1,28 @@
+{
+  "data": {
+    "children": [
+      {
+        "data": {
+          "title": "GPT-5 vs Claude 4: Which is better for coding?",
+          "score": 1250,
+          "num_comments": 342,
+          "url": "https://reddit.com/r/artificial/comments/abc123",
+          "selftext": "I've been testing both models for a week...",
+          "created_utc": 1741500000,
+          "subreddit": "artificial"
+        }
+      },
+      {
+        "data": {
+          "title": "Open-source AI tools that actually work",
+          "score": 890,
+          "num_comments": 156,
+          "url": "https://reddit.com/r/MachineLearning/comments/def456",
+          "selftext": "Here's my curated list of open-source AI tools...",
+          "created_utc": 1741400000,
+          "subreddit": "MachineLearning"
+        }
+      }
+    ]
+  }
+}

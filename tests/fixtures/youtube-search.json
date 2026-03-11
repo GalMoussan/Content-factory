@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": { "videoId": "abc123" },
+      "snippet": {
+        "title": "AI Tools Every Developer Needs in 2026",
+        "description": "In this video we cover the top AI tools...",
+        "publishedAt": "2026-03-08T10:00:00Z",
+        "channelTitle": "TechChannel",
+        "thumbnails": {
+          "default": { "url": "https://i.ytimg.com/vi/abc123/default.jpg" }
+        }
+      },
+      "statistics": {
+        "viewCount": "45000",
+        "likeCount": "2100"
+      }
+    },
+    {
+      "id": { "videoId": "def456" },
+      "snippet": {
+        "title": "Claude vs GPT: The Definitive Comparison",
+        "description": "We put both models through rigorous testing...",
+        "publishedAt": "2026-03-07T14:00:00Z",
+        "channelTitle": "AIReviews",
+        "thumbnails": {
+          "default": { "url": "https://i.ytimg.com/vi/def456/default.jpg" }
+        }
+      },
+      "statistics": {
+        "viewCount": "120000",
+        "likeCount": "8500"
+      }
+    }
+  ]
+}

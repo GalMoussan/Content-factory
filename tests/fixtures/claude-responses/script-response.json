@@ -1,0 +1,13 @@
+{
+  "id": "msg_fixture_001",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "# Top 5 AI Tools for Developers in 2026\n\n## Introduction\nWelcome to another episode where we break down the most powerful AI tools reshaping how developers write code.\n\n## Section 1: Claude Code\nFirst up is Claude Code by Anthropic. This terminal-native AI assistant can read your entire codebase, write tests, and even deploy your apps.\n\n## Section 2: GitHub Copilot\nGitHub Copilot continues to be the go-to for inline code suggestions. With its latest update, it now supports multi-file edits.\n\n## Section 3: Cursor\nCursor takes the VS Code experience and supercharges it with AI. Its composer feature can refactor entire projects.\n\n## Section 4: Bolt\nBolt lets you describe an app in plain English and generates a full-stack application. Perfect for rapid prototyping.\n\n## Section 5: Devin\nDevin is the closest thing we have to an autonomous software engineer. It can handle complex multi-step tasks independently.\n\n## Conclusion\nThese tools are not replacing developers — they're making us 10x more productive. Subscribe for more AI tool breakdowns!"
+    }
+  ],
+  "model": "claude-sonnet-4-6",
+  "stop_reason": "end_turn"
+}

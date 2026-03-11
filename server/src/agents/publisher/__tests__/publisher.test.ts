@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { PublishRecordSchema } from '@shared/schemas';
 import { PublisherAgent } from '../index';
 import { getValidAccessToken } from '../youtube-auth';
@@ -10,6 +10,51 @@ import type { QAResult, ContentBundle } from '@shared/schemas';
 
 // T011 — Publisher Agent
 // Tests will fail at import until publisher modules are implemented.
+
+// ---------------------------------------------------------------------------
+// Hoisted mock functions — must be declared via vi.hoisted() so they are
+// available when vi.mock() factory functions are executed (vi.mock is hoisted
+// to the top of the module before any variable declarations).
+// ---------------------------------------------------------------------------
+const { mockGetToken, mockUpload, mockOAuth2Instance, mockYoutubeInsert } = vi.hoisted(() => ({
+  mockGetToken: vi.fn(),
+  mockUpload: vi.fn(),
+  mockOAuth2Instance: {
+    setCredentials: vi.fn(),
+    getAccessToken: vi.fn().mockResolvedValue({ token: 'ACCESS_TOKEN_xyz' }),
+  },
+  mockYoutubeInsert: vi.fn().mockResolvedValue({
+    data: {
+      id: 'dQw4w9WgXcQ',
+      status: { uploadStatus: 'uploaded', privacyStatus: 'public' },
+      snippet: { title: 'GPT-5: The Complete Developer Migration Guide' },
+    },
+  }),
+}));
+
+// ---------------------------------------------------------------------------
+// Top-level module mocks (hoisted by Vitest)
+// ---------------------------------------------------------------------------
+vi.mock('googleapis', () => ({
+  google: {
+    auth: {
+      OAuth2: class MockOAuth2 {
+        constructor() {
+          Object.assign(this, mockOAuth2Instance);
+        }
+        setCredentials = mockOAuth2Instance.setCredentials;
+        getAccessToken = mockOAuth2Instance.getAccessToken;
+      },
+    },
+    youtube: vi.fn().mockReturnValue({
+      videos: { insert: mockYoutubeInsert },
+    }),
+  },
+}));
+
+vi.mock('../youtube-auth', () => ({ getValidAccessToken: mockGetToken }));
+vi.mock('../uploader', () => ({ uploadVideo: mockUpload }));
+vi.mock('../scheduler', () => ({ calculatePublishTime: vi.fn() }));
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -74,18 +119,21 @@ const YOUTUBE_UPLOAD_RESPONSE = {
 // YouTube Auth
 // ---------------------------------------------------------------------------
 describe('T011 — getValidAccessToken', () => {
-  it('should return a valid access token string', async () => {
-    vi.mock('googleapis', () => ({
-      google: {
-        auth: {
-          OAuth2: vi.fn().mockImplementation(() => ({
-            setCredentials: vi.fn(),
-            getAccessToken: vi.fn().mockResolvedValue({ token: 'ACCESS_TOKEN_xyz' }),
-          })),
-        },
-      },
-    }));
+  let realGetValidAccessToken: typeof getValidAccessToken;
 
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../youtube-auth')>('../youtube-auth');
+    realGetValidAccessToken = actual.getValidAccessToken;
+  });
+
+  beforeEach(() => {
+    vi.mocked(getValidAccessToken).mockImplementation(realGetValidAccessToken);
+    mockOAuth2Instance.setCredentials.mockClear();
+    mockOAuth2Instance.getAccessToken.mockReset();
+    mockOAuth2Instance.getAccessToken.mockResolvedValue({ token: 'ACCESS_TOKEN_xyz' });
+  });
+
+  it('should return a valid access token string', async () => {
     const token = await getValidAccessToken({
       clientId: 'FAKE_CLIENT_ID',
       clientSecret: 'FAKE_CLIENT_SECRET',
@@ -94,23 +142,13 @@ describe('T011 — getValidAccessToken', () => {
 
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
-    vi.restoreAllMocks();
   });
 
   // Acceptance: "OAuth2 token expiry triggers fatal error (not retried as transient)"
   it('should throw a fatal error when the refresh token is revoked', async () => {
-    vi.mock('googleapis', () => ({
-      google: {
-        auth: {
-          OAuth2: vi.fn().mockImplementation(() => ({
-            setCredentials: vi.fn(),
-            getAccessToken: vi.fn().mockRejectedValue(
-              Object.assign(new Error('Token has been revoked'), { code: 401 })
-            ),
-          })),
-        },
-      },
-    }));
+    mockOAuth2Instance.getAccessToken.mockRejectedValueOnce(
+      Object.assign(new Error('Token has been revoked'), { code: 401 })
+    );
 
     await expect(
       getValidAccessToken({
@@ -119,8 +157,6 @@ describe('T011 — getValidAccessToken', () => {
         refreshToken: 'REVOKED_REFRESH_TOKEN',
       })
     ).rejects.toThrow();
-
-    vi.restoreAllMocks();
   });
 
   it('should throw when OAuth2 credentials are missing', async () => {
@@ -135,25 +171,33 @@ describe('T011 — getValidAccessToken', () => {
 // ---------------------------------------------------------------------------
 describe('T011 — uploadVideo', () => {
   const runDir = '/tmp/run-publisher-001';
+  let realUploadVideo: typeof uploadVideo;
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../uploader')>('../uploader');
+    realUploadVideo = actual.uploadVideo;
+    // Create the test directory once for all upload tests
+    const fs = await import('node:fs');
+    fs.mkdirSync(`${runDir}/assets`, { recursive: true });
+    fs.writeFileSync(`${runDir}/assets/video.mp4`, Buffer.alloc(100));
+  });
+
+  afterAll(async () => {
+    // Clean up after all upload tests to avoid ENOENT race from createReadStream
+    const fs = await import('node:fs');
+    // Small delay to let pending streams close
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    fs.rmSync(runDir, { recursive: true, force: true });
+  });
 
   beforeEach(() => {
-    vi.mock('googleapis', () => ({
-      google: {
-        youtube: vi.fn().mockReturnValue({
-          videos: {
-            insert: vi.fn().mockResolvedValue({ data: YOUTUBE_UPLOAD_RESPONSE }),
-          },
-        }),
-      },
-    }));
+    vi.mocked(uploadVideo).mockImplementation(realUploadVideo as any);
+    mockYoutubeInsert.mockClear();
+    mockYoutubeInsert.mockResolvedValue({ data: YOUTUBE_UPLOAD_RESPONSE });
   });
 
   // Acceptance: "Video uploaded with correct metadata (title, description, tags, category)"
   it('should upload the video and return the YouTube video ID and URL', async () => {
-    const fs = await import('node:fs');
-    fs.mkdirSync(`${runDir}/assets`, { recursive: true });
-    fs.writeFileSync(`${runDir}/assets/video.mp4`, Buffer.alloc(100));
-
     const result = await uploadVideo(
       {
         videoPath: `${runDir}/assets/video.mp4`,
@@ -167,19 +211,9 @@ describe('T011 — uploadVideo', () => {
 
     expect(result.videoId).toBe('dQw4w9WgXcQ');
     expect(result.videoUrl).toContain('youtube.com');
-
-    fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   it('should set the category to Science & Technology (id 28)', async () => {
-    const { google } = await import('googleapis');
-    const mockInsert = (google.youtube as any)().videos.insert as ReturnType<typeof vi.fn>;
-
-    const fs = await import('node:fs');
-    fs.mkdirSync(`${runDir}/assets`, { recursive: true });
-    fs.writeFileSync(`${runDir}/assets/video.mp4`, Buffer.alloc(100));
-
     await uploadVideo(
       {
         videoPath: `${runDir}/assets/video.mp4`,
@@ -191,27 +225,12 @@ describe('T011 — uploadVideo', () => {
       'FAKE_ACCESS_TOKEN',
     );
 
-    const callArgs = mockInsert.mock.calls[0][0];
+    const callArgs = mockYoutubeInsert.mock.calls[0][0];
     expect(callArgs.requestBody.snippet.categoryId).toBe('28');
-
-    fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   it('should throw when the YouTube upload API returns an error', async () => {
-    vi.mock('googleapis', () => ({
-      google: {
-        youtube: vi.fn().mockReturnValue({
-          videos: {
-            insert: vi.fn().mockRejectedValue(new Error('Quota exceeded')),
-          },
-        }),
-      },
-    }));
-
-    const fs = await import('node:fs');
-    fs.mkdirSync(`${runDir}/assets`, { recursive: true });
-    fs.writeFileSync(`${runDir}/assets/video.mp4`, Buffer.alloc(100));
+    mockYoutubeInsert.mockRejectedValueOnce(new Error('Quota exceeded'));
 
     await expect(
       uploadVideo(
@@ -219,9 +238,6 @@ describe('T011 — uploadVideo', () => {
         'FAKE_ACCESS_TOKEN',
       )
     ).rejects.toThrow();
-
-    fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 });
 
@@ -229,6 +245,17 @@ describe('T011 — uploadVideo', () => {
 // Scheduler
 // ---------------------------------------------------------------------------
 describe('T011 — calculatePublishTime', () => {
+  let realCalculatePublishTime: typeof calculatePublishTime;
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<typeof import('../scheduler')>('../scheduler');
+    realCalculatePublishTime = actual.calculatePublishTime;
+  });
+
+  beforeEach(() => {
+    vi.mocked(calculatePublishTime).mockImplementation(realCalculatePublishTime as any);
+  });
+
   it('should return a future ISO date string', () => {
     const publishAt = calculatePublishTime({ preferredHour: 14, timezone: 'America/New_York' });
     const date = new Date(publishAt);
@@ -286,6 +313,20 @@ describe('T011 — optimizeMetadata', () => {
 // Full agent lifecycle
 // ---------------------------------------------------------------------------
 describe('T011 — PublisherAgent lifecycle', () => {
+  beforeEach(() => {
+    // Reset all module mocks to controlled behavior for lifecycle tests
+    mockGetToken.mockReset();
+    mockGetToken.mockResolvedValue('VALID_ACCESS_TOKEN');
+    mockUpload.mockReset();
+    mockUpload.mockResolvedValue({ videoId: 'dQw4w9WgXcQ', videoUrl: 'https://youtube.com/watch?v=dQw4w9WgXcQ' });
+    vi.mocked(calculatePublishTime).mockReset();
+    vi.mocked(calculatePublishTime).mockReturnValue(undefined);
+    vi.mocked(getValidAccessToken).mockReset();
+    vi.mocked(getValidAccessToken).mockResolvedValue('VALID_ACCESS_TOKEN');
+    vi.mocked(uploadVideo).mockReset();
+    vi.mocked(uploadVideo).mockResolvedValue({ videoId: 'dQw4w9WgXcQ', videoUrl: 'https://youtube.com/watch?v=dQw4w9WgXcQ' });
+  });
+
   function makeCtx(runDir: string): AgentContext {
     const Database = require('better-sqlite3');
     const db = new Database(':memory:');
@@ -320,10 +361,6 @@ describe('T011 — PublisherAgent lifecycle', () => {
 
   // Acceptance: "Skips upload when verdict is rejected or flagged"
   it('should skip upload and write a skipped publish-log when verdict is rejected', async () => {
-    const mockUpload = vi.fn();
-    vi.mock('../uploader', () => ({ uploadVideo: mockUpload }));
-    vi.mock('../youtube-auth', () => ({ getValidAccessToken: vi.fn().mockResolvedValue('TOKEN') }));
-
     const runDir = '/tmp/run-pub-rejected';
     const agent = new PublisherAgent();
     const ctx = makeCtx(runDir);
@@ -343,14 +380,9 @@ describe('T011 — PublisherAgent lifecycle', () => {
     }
 
     fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   it('should skip upload and write a skipped publish-log when verdict is flagged', async () => {
-    const mockUpload = vi.fn();
-    vi.mock('../uploader', () => ({ uploadVideo: mockUpload }));
-    vi.mock('../youtube-auth', () => ({ getValidAccessToken: vi.fn().mockResolvedValue('TOKEN') }));
-
     const runDir = '/tmp/run-pub-flagged';
     const agent = new PublisherAgent();
     const ctx = makeCtx(runDir);
@@ -364,21 +396,10 @@ describe('T011 — PublisherAgent lifecycle', () => {
     expect(mockUpload).not.toHaveBeenCalled();
 
     fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   // Acceptance: "Output validates against PublishRecordSchema"
   it('should produce output that validates against PublishRecordSchema on successful upload', async () => {
-    vi.mock('../uploader', () => ({
-      uploadVideo: vi.fn().mockResolvedValue({ videoId: 'dQw4w9WgXcQ', videoUrl: 'https://youtube.com/watch?v=dQw4w9WgXcQ' }),
-    }));
-    vi.mock('../youtube-auth', () => ({
-      getValidAccessToken: vi.fn().mockResolvedValue('VALID_ACCESS_TOKEN'),
-    }));
-    vi.mock('../scheduler', () => ({
-      calculatePublishTime: vi.fn().mockReturnValue(undefined),
-    }));
-
     const runDir = '/tmp/run-pub-success';
     const agent = new PublisherAgent();
     const ctx = makeCtx(runDir);
@@ -396,21 +417,10 @@ describe('T011 — PublisherAgent lifecycle', () => {
     }
 
     fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   // Acceptance: "Publish record also written to SQLite publish_log table"
   it('should write the publish record to the SQLite publish_log table', async () => {
-    vi.mock('../uploader', () => ({
-      uploadVideo: vi.fn().mockResolvedValue({ videoId: 'dQw4w9WgXcQ', videoUrl: 'https://youtube.com/watch?v=dQw4w9WgXcQ' }),
-    }));
-    vi.mock('../youtube-auth', () => ({
-      getValidAccessToken: vi.fn().mockResolvedValue('VALID_ACCESS_TOKEN'),
-    }));
-    vi.mock('../scheduler', () => ({
-      calculatePublishTime: vi.fn().mockReturnValue(undefined),
-    }));
-
     const runDir = '/tmp/run-pub-sqlite';
     const agent = new PublisherAgent();
     const ctx = makeCtx(runDir);
@@ -431,17 +441,14 @@ describe('T011 — PublisherAgent lifecycle', () => {
     expect(row!.status).toBe('published');
 
     fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 
   // Acceptance: "OAuth2 token refreshed before each upload"
   it('should refresh the OAuth2 token before calling uploadVideo', async () => {
-    const mockGetToken = vi.fn().mockResolvedValue('FRESH_TOKEN');
-    const mockUpload = vi.fn().mockResolvedValue({ videoId: 'abc', videoUrl: 'https://youtube.com/watch?v=abc' });
-
-    vi.mock('../youtube-auth', () => ({ getValidAccessToken: mockGetToken }));
-    vi.mock('../uploader', () => ({ uploadVideo: mockUpload }));
-    vi.mock('../scheduler', () => ({ calculatePublishTime: vi.fn().mockReturnValue(undefined) }));
+    vi.mocked(getValidAccessToken).mockReset();
+    vi.mocked(getValidAccessToken).mockResolvedValue('FRESH_TOKEN');
+    vi.mocked(uploadVideo).mockReset();
+    vi.mocked(uploadVideo).mockResolvedValue({ videoId: 'abc', videoUrl: 'https://youtube.com/watch?v=abc' });
 
     const runDir = '/tmp/run-pub-token-refresh';
     const agent = new PublisherAgent();
@@ -454,13 +461,12 @@ describe('T011 — PublisherAgent lifecycle', () => {
 
     await agent.execute(ctx);
 
-    expect(mockGetToken).toHaveBeenCalledOnce();
+    expect(vi.mocked(getValidAccessToken)).toHaveBeenCalledOnce();
 
     // Ensure upload was called with the freshly-obtained token
-    const uploadCallArgs = mockUpload.mock.calls[0];
+    const uploadCallArgs = vi.mocked(uploadVideo).mock.calls[0];
     expect(uploadCallArgs[1]).toBe('FRESH_TOKEN');
 
     fs.rmSync(runDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
   });
 });

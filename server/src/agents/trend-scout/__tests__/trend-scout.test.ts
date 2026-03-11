@@ -244,21 +244,33 @@ describe('T007 — TrendScoutAgent lifecycle', () => {
   // Acceptance: "Output validates against ScoredTopicListSchema"
   it('should produce output that validates against ScoredTopicListSchema', async () => {
     // Mock all fetchers to return fixture data so no real network calls happen
-    vi.mock('../rss-fetcher', () => ({
-      fetchRssFeeds: vi.fn().mockResolvedValue([
-        { title: 'GPT-5 Launches', url: 'https://openai.com', publishedAt: new Date().toISOString(), summary: '' },
-      ]),
-    }));
-    vi.mock('../reddit-fetcher', () => ({
-      fetchAllSubreddits: vi.fn().mockResolvedValue([
-        { title: 'GPT-5 is Here!', url: 'https://reddit.com/r/ml', score: 4200, commentCount: 300 },
-      ]),
-    }));
-    vi.mock('../youtube-fetcher', () => ({
-      fetchAllYouTubeTrends: vi.fn().mockResolvedValue([
-        { title: 'GPT-5 Review', channelName: 'AI Explained', viewCount: 800000, videoId: 'yt001', publishedAt: new Date().toISOString() },
-      ]),
-    }));
+    vi.mock('../rss-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../rss-fetcher')>();
+      return {
+        ...actual,
+        fetchRssFeeds: vi.fn().mockResolvedValue([
+          { title: 'GPT-5 Launches', url: 'https://openai.com', publishedAt: new Date().toISOString(), summary: '' },
+        ]),
+      };
+    });
+    vi.mock('../reddit-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../reddit-fetcher')>();
+      return {
+        ...actual,
+        fetchAllSubreddits: vi.fn().mockResolvedValue([
+          { title: 'GPT-5 is Here!', url: 'https://reddit.com/r/ml', score: 4200, commentCount: 300 },
+        ]),
+      };
+    });
+    vi.mock('../youtube-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../youtube-fetcher')>();
+      return {
+        ...actual,
+        fetchAllYouTubeTrends: vi.fn().mockResolvedValue([
+          { title: 'GPT-5 Review', channelName: 'AI Explained', viewCount: 800000, videoId: 'yt001', publishedAt: new Date().toISOString() },
+        ]),
+      };
+    });
 
     const agent = new TrendScoutAgent();
     const ctx = makeCtx();
@@ -279,17 +291,29 @@ describe('T007 — TrendScoutAgent lifecycle', () => {
 
   // Acceptance: "Tests cover happy path and each source failing independently"
   it('should succeed even when RSS fetching fails completely', async () => {
-    vi.mock('../rss-fetcher', () => ({
-      fetchRssFeeds: vi.fn().mockRejectedValue(new Error('RSS unreachable')),
-    }));
-    vi.mock('../reddit-fetcher', () => ({
-      fetchAllSubreddits: vi.fn().mockResolvedValue([
-        { title: 'Top AI Story', url: 'https://reddit.com', score: 5000, commentCount: 400 },
-      ]),
-    }));
-    vi.mock('../youtube-fetcher', () => ({
-      fetchAllYouTubeTrends: vi.fn().mockResolvedValue([]),
-    }));
+    vi.mock('../rss-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../rss-fetcher')>();
+      return {
+        ...actual,
+        fetchRssFeeds: vi.fn().mockRejectedValue(new Error('RSS unreachable')),
+      };
+    });
+    vi.mock('../reddit-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../reddit-fetcher')>();
+      return {
+        ...actual,
+        fetchAllSubreddits: vi.fn().mockResolvedValue([
+          { title: 'Top AI Story', url: 'https://reddit.com', score: 5000, commentCount: 400 },
+        ]),
+      };
+    });
+    vi.mock('../youtube-fetcher', async (importActual) => {
+      const actual = await importActual<typeof import('../youtube-fetcher')>();
+      return {
+        ...actual,
+        fetchAllYouTubeTrends: vi.fn().mockResolvedValue([]),
+      };
+    });
 
     const agent = new TrendScoutAgent();
     const ctx = makeCtx();

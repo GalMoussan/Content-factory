@@ -26,6 +26,7 @@ export interface AgentResult<T = unknown> {
   readonly durationMs?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface Agent<I = unknown, O = unknown> {
   readonly name: string;
   execute(ctx: AgentContext): Promise<AgentResult<O>>;
