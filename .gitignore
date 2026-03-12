@@ -14,3 +14,7 @@ coverage/
 queue/data/
 test-results/
 playwright-report/
+
+# Build artifacts from tsc (shared/ is source, not output)
+shared/**/*.js
+shared/**/*.d.ts

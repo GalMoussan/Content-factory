@@ -83,10 +83,8 @@ export async function assembleVideo(
       concurrency: 1,
     });
   } catch (err) {
-    // Remotion not installed or rendering failed — create a placeholder
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`Remotion rendering failed (using placeholder): ${message}`);
-    fs.writeFileSync(videoPath, Buffer.from('placeholder-video'));
+    throw new Error(`Video rendering failed: ${message}`);
   }
 
   return { videoPath };

@@ -51,7 +51,21 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }));
 
-vi.mock('@remotion/renderer', () => ({ renderMedia: mockRenderMedia }));
+vi.mock('@remotion/bundler', () => ({
+  bundle: vi.fn().mockResolvedValue('/tmp/remotion-bundle'),
+}));
+
+vi.mock('@remotion/renderer', () => ({
+  renderMedia: mockRenderMedia,
+  selectComposition: vi.fn().mockResolvedValue({
+    id: 'ContentVideo',
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    durationInFrames: 300,
+    defaultProps: {},
+  }),
+}));
 
 vi.mock('../script-writer', () => ({
   generateScript: vi.fn(),
@@ -217,6 +231,11 @@ describe('T009 — assembleVideo', () => {
     const fs = await import('node:fs');
     fs.mkdirSync(`${runDir}/assets`, { recursive: true });
 
+    // Make renderMedia create the output file (simulating real Remotion behavior)
+    mockRenderMedia.mockImplementationOnce(async (opts: { outputLocation: string }) => {
+      fs.writeFileSync(opts.outputLocation, Buffer.from('mock-video-data'));
+    });
+
     const result = await assembleVideo(
       { sections: MOCK_CLAUDE_RESPONSE.sections, narrationPath: `${runDir}/assets/narration.mp3` },
       runDir,
@@ -228,19 +247,20 @@ describe('T009 — assembleVideo', () => {
     fs.rmSync(runDir, { recursive: true, force: true });
   });
 
-  // Acceptance: "Video assembler handles missing Remotion gracefully"
-  it('should create a placeholder video when Remotion bundling fails', async () => {
+  // Acceptance: "Video assembler throws when Remotion rendering fails"
+  it('should throw when Remotion rendering fails', async () => {
     const runDir = '/tmp/run-content-concurrency';
     const fs = await import('node:fs');
     fs.mkdirSync(`${runDir}/assets`, { recursive: true });
 
-    const result = await assembleVideo(
-      { sections: MOCK_CLAUDE_RESPONSE.sections, narrationPath: `${runDir}/assets/narration.mp3` },
-      runDir,
-    );
+    mockRenderMedia.mockRejectedValueOnce(new Error('Rendering crashed'));
 
-    // Should still produce a video file (placeholder fallback in test env)
-    expect(result.videoPath).toContain('video.mp4');
+    await expect(
+      assembleVideo(
+        { sections: MOCK_CLAUDE_RESPONSE.sections, narrationPath: `${runDir}/assets/narration.mp3` },
+        runDir,
+      ),
+    ).rejects.toThrow('Video rendering failed');
 
     fs.rmSync(runDir, { recursive: true, force: true });
   });

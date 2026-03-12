@@ -90,6 +90,7 @@ describe('T013 — Retry Logic with Exponential Backoff', () => {
     };
 
     const promise = withRetry(fn, config, undefined, controller.signal);
+    promise.catch(() => {}); // suppress unhandled rejection while timers run
 
     // Abort before all retries complete
     controller.abort();
@@ -114,6 +115,7 @@ describe('T013 — Retry Logic with Exponential Backoff', () => {
     };
 
     const promise = withRetry(fn, config);
+    promise.catch(() => {}); // suppress unhandled rejection while timers run
     await vi.runAllTimersAsync();
 
     await expect(promise).rejects.toThrow(FatalError);
@@ -150,6 +152,7 @@ describe('T013 — Retry Logic with Exponential Backoff', () => {
     };
 
     const promise = withRetry(fn, config);
+    promise.catch(() => {}); // suppress unhandled rejection while timers run
     await vi.runAllTimersAsync();
 
     await expect(promise).rejects.toBeInstanceOf(AgentExecutionError);

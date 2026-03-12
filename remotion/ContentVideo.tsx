@@ -2,7 +2,9 @@
 import React from 'react';
 import {
   AbsoluteFill,
+  Audio,
   Sequence,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
@@ -158,7 +160,8 @@ export const ContentVideo: React.FC<ContentVideoProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      {/* Narration audio — embedded separately via ffmpeg after render */}
+      {/* Narration audio */}
+      {narrationPath && <Audio src={staticFile(narrationPath)} />}
 
       {/* Section sequences */}
       {sections.map((section, i) => {
