@@ -6,6 +6,7 @@ import type { AgentContext } from '@shared/types/agent';
 import { BaseAgent } from '../base-agent.js';
 import { generateScript } from './script-writer.js';
 import { generateNarration } from './tts-narrator.js';
+import { adjustSectionTimings } from './timing-adjuster.js';
 import { assembleVideo } from './video-assembler.js';
 
 /**
@@ -46,9 +47,13 @@ export class ContentProducerAgent extends BaseAgent<ResearchDossier, ContentBund
     );
     ctx.logger.info({ durationSeconds: narration.durationSeconds }, 'Narration generated');
 
+    // Step 2.5: Adjust section timings based on actual audio duration
+    const adjustedSections = adjustSectionTimings(script.sections, narration.durationSeconds);
+    ctx.logger.info('Section timings adjusted to match audio');
+
     // Step 3: Assemble video via Remotion
     const video = await assembleVideo(
-      { sections: script.sections, narrationPath: narration.narrationPath },
+      { sections: adjustedSections, narrationPath: narration.narrationPath, title: script.title },
       ctx.runDir,
     );
     ctx.logger.info('Video assembled');
@@ -62,7 +67,7 @@ export class ContentProducerAgent extends BaseAgent<ResearchDossier, ContentBund
       title: script.title,
       description: script.description,
       tags: [...script.tags],
-      sections: [...script.sections],
+      sections: [...adjustedSections],
       narrationPath: relativeNarrationPath,
       videoPath: relativeVideoPath,
       totalDurationSeconds: narration.durationSeconds,

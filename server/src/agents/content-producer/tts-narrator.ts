@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ScriptSection } from '@shared/schemas';
+import { getAudioDurationSeconds } from './audio-duration.js';
 
 export interface TTSConfig {
   readonly subscriptionKey: string;
@@ -23,7 +24,6 @@ export async function generateNarration(
   config: TTSConfig,
 ): Promise<NarrationResult> {
   const fullText = sections.map((s) => s.content).join(' ');
-  const totalDuration = sections.reduce((sum, s) => sum + s.durationSeconds, 0);
 
   const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
   <voice name="${config.voice}">
@@ -54,8 +54,11 @@ export async function generateNarration(
   const narrationPath = path.join(assetsDir, 'narration.mp3');
   fs.writeFileSync(narrationPath, Buffer.from(audioBuffer));
 
+  // Measure actual audio duration instead of using Claude's estimates
+  const actualDuration = await getAudioDurationSeconds(narrationPath);
+
   return {
     narrationPath,
-    durationSeconds: totalDuration,
+    durationSeconds: actualDuration,
   };
 }

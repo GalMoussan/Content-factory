@@ -51,6 +51,14 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }));
 
+vi.mock('@remotion/media-parser', () => ({
+  parseMedia: vi.fn().mockResolvedValue({ slowDurationInSeconds: 120 }),
+}));
+
+vi.mock('@remotion/media-parser/node', () => ({
+  nodeReader: {},
+}));
+
 vi.mock('@remotion/bundler', () => ({
   bundle: vi.fn().mockResolvedValue('/tmp/remotion-bundle'),
 }));

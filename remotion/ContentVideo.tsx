@@ -5,11 +5,15 @@ import {
   Audio,
   Sequence,
   staticFile,
-  useCurrentFrame,
   useVideoConfig,
   interpolate,
-  spring,
+  useCurrentFrame,
 } from 'remotion';
+import { TitleCard } from './components/TitleCard';
+import { BackgroundPattern } from './components/BackgroundPattern';
+import { AnimatedText } from './components/AnimatedText';
+import { SectionLabel } from './components/SectionLabel';
+import { ProgressBar } from './components/ProgressBar';
 
 interface ScriptSection {
   type: 'hook' | 'intro' | 'body' | 'examples' | 'cta' | 'outro';
@@ -20,161 +24,149 @@ interface ScriptSection {
 interface ContentVideoProps {
   sections: ScriptSection[];
   narrationPath: string;
+  title?: string;
 }
 
-const SECTION_COLORS: Record<string, string> = {
-  hook: '#1a1a2e',
-  intro: '#16213e',
-  body: '#0f3460',
-  examples: '#1a1a2e',
-  cta: '#e94560',
-  outro: '#16213e',
-};
-
-const SECTION_LABELS: Record<string, string> = {
-  hook: '',
-  intro: 'Introduction',
-  body: '',
-  examples: 'Examples',
-  cta: '',
-  outro: '',
-};
-
-function SectionSlide({
-  section,
-  fps,
-}: {
-  section: ScriptSection;
-  fps: number;
-}) {
-  const frame = useCurrentFrame();
-  const totalFrames = section.durationSeconds * fps;
-
-  // Fade in
-  const opacity = interpolate(frame, [0, 15], [0, 1], {
-    extrapolateRight: 'clamp',
-  });
-
-  // Title entrance spring
-  const titleProgress = spring({
-    frame,
-    fps,
-    config: { damping: 15, stiffness: 100 },
-  });
-
-  // Text reveal (word by word for body/examples)
-  const words = section.content.split(' ');
-  const wordsPerFrame = words.length / (totalFrames * 0.7); // Show all words in 70% of duration
-
-  const label = SECTION_LABELS[section.type];
-
-  return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: SECTION_COLORS[section.type] ?? '#1a1a2e',
-        opacity,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 80,
-      }}
-    >
-      {/* Section label */}
-      {label && (
-        <div
-          style={{
-            color: '#e94560',
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: 4,
-            textTransform: 'uppercase',
-            marginBottom: 30,
-            opacity: titleProgress,
-            transform: `translateY(${(1 - titleProgress) * -20}px)`,
-          }}
-        >
-          {label}
-        </div>
-      )}
-
-      {/* Content text */}
-      <div
-        style={{
-          color: '#ffffff',
-          fontSize: section.type === 'hook' || section.type === 'cta' ? 48 : 36,
-          fontWeight: section.type === 'hook' || section.type === 'cta' ? 700 : 400,
-          lineHeight: 1.5,
-          textAlign: 'center',
-          maxWidth: 1400,
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-        }}
-      >
-        {words.map((word, i) => {
-          const wordOpacity = interpolate(
-            frame,
-            [i / wordsPerFrame, (i + 1) / wordsPerFrame],
-            [0, 1],
-            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
-          );
-          return (
-            <span key={i} style={{ opacity: wordOpacity }}>
-              {word}{' '}
-            </span>
-          );
-        })}
-      </div>
-
-      {/* Progress bar */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 40,
-          left: 80,
-          right: 80,
-          height: 4,
-          backgroundColor: 'rgba(255,255,255,0.1)',
-          borderRadius: 2,
-        }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${(frame / totalFrames) * 100}%`,
-            backgroundColor: '#e94560',
-            borderRadius: 2,
-          }}
-        />
-      </div>
-    </AbsoluteFill>
-  );
-}
+const TITLE_CARD_SECONDS = 3;
+const TRANSITION_FRAMES = 12; // 0.4s cross-fade at 30fps
 
 export const ContentVideo: React.FC<ContentVideoProps> = ({
   sections,
   narrationPath,
+  title,
 }) => {
   const { fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+  const titleDurationFrames = TITLE_CARD_SECONDS * fps;
 
-  let frameOffset = 0;
+  // Calculate section frame offsets
+  const sectionMeta = sections.map((section) => ({
+    section,
+    durationInFrames: Math.round(section.durationSeconds * fps),
+  }));
+
+  let frameOffset = titleDurationFrames;
+
+  // Build sequence entries with their start frames
+  const sequences = sectionMeta.map((meta, i) => {
+    const from = frameOffset;
+    frameOffset += meta.durationInFrames;
+    return { ...meta, from };
+  });
+
+  // Cross-fade between sections: fade out last 12 frames, fade in first 12 frames
+  const renderSectionFade = (sectionIndex: number, localFrame: number, durationInFrames: number) => {
+    // Fade in at start of section
+    const fadeIn = interpolate(localFrame, [0, TRANSITION_FRAMES], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+
+    // Fade out at end of section (except last section)
+    const fadeOut =
+      sectionIndex < sections.length - 1
+        ? interpolate(
+            localFrame,
+            [durationInFrames - TRANSITION_FRAMES, durationInFrames],
+            [1, 0],
+            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+          )
+        : 1;
+
+    return Math.min(fadeIn, fadeOut);
+  };
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      {/* Narration audio */}
-      {narrationPath && <Audio src={staticFile(narrationPath)} />}
+      {/* Title Card */}
+      <Sequence from={0} durationInFrames={titleDurationFrames}>
+        <TitleCard title={title ?? sections[0]?.content ?? ''} />
+      </Sequence>
+
+      {/* Narration audio — starts after title card */}
+      {narrationPath && (
+        <Sequence from={titleDurationFrames}>
+          <Audio src={staticFile(narrationPath)} />
+        </Sequence>
+      )}
 
       {/* Section sequences */}
-      {sections.map((section, i) => {
-        const durationInFrames = Math.round(section.durationSeconds * fps);
-        const from = frameOffset;
-        frameOffset += durationInFrames;
+      {sequences.map(({ section, from, durationInFrames }, i) => (
+        <Sequence key={i} from={from} durationInFrames={durationInFrames}>
+          <SectionContent
+            section={section}
+            sectionIndex={i}
+            totalSections={sections.length}
+            durationInFrames={durationInFrames}
+          />
+        </Sequence>
+      ))}
 
-        return (
-          <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-            <SectionSlide section={section} fps={fps} />
-          </Sequence>
-        );
-      })}
+      {/* Global progress bar */}
+      <ProgressBar
+        sections={sections}
+        fps={fps}
+        titleDurationFrames={titleDurationFrames}
+      />
     </AbsoluteFill>
   );
 };
+
+/**
+ * Individual section with background, label, and animated text.
+ * Handles its own fade-in/fade-out transitions.
+ */
+function SectionContent({
+  section,
+  sectionIndex,
+  totalSections,
+  durationInFrames,
+}: {
+  section: ScriptSection;
+  sectionIndex: number;
+  totalSections: number;
+  durationInFrames: number;
+}) {
+  const frame = useCurrentFrame();
+
+  // Fade transitions
+  const fadeIn = interpolate(frame, [0, TRANSITION_FRAMES], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const fadeOut =
+    sectionIndex < totalSections - 1
+      ? interpolate(
+          frame,
+          [durationInFrames - TRANSITION_FRAMES, durationInFrames],
+          [1, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+        )
+      : 1;
+  const opacity = Math.min(fadeIn, fadeOut);
+
+  return (
+    <AbsoluteFill style={{ opacity }}>
+      {/* Animated gradient background */}
+      <BackgroundPattern
+        sectionType={section.type}
+        durationInFrames={durationInFrames}
+      />
+
+      {/* Section type label */}
+      <SectionLabel type={section.type} />
+
+      {/* Main content area */}
+      <AbsoluteFill
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <AnimatedText section={section} totalFrames={durationInFrames} />
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+}

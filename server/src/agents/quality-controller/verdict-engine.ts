@@ -12,8 +12,8 @@ export interface VerdictResult {
 }
 
 const DEFAULT_CONFIG: VerdictConfig = {
-  approveThreshold: 75,
-  rejectThreshold: 40,
+  approveThreshold: 60,
+  rejectThreshold: 30,
 };
 
 /**

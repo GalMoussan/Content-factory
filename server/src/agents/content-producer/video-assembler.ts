@@ -5,7 +5,10 @@ import type { ScriptSection } from '@shared/schemas';
 export interface VideoInput {
   readonly sections: readonly ScriptSection[];
   readonly narrationPath: string;
+  readonly title?: string;
 }
+
+const TITLE_CARD_SECONDS = 3;
 
 export interface VideoResult {
   readonly videoPath: string;
@@ -59,6 +62,7 @@ export async function assembleVideo(
     const inputProps = {
       sections: [...input.sections],
       narrationPath: 'narration.mp3',
+      title: input.title ?? '',
     };
 
     const composition = await selectComposition({
@@ -67,10 +71,11 @@ export async function assembleVideo(
       inputProps,
     });
 
-    // Override duration based on actual content
+    // Override duration: sections + title card
+    const totalVideoSeconds = totalDurationSeconds + TITLE_CARD_SECONDS;
     const compositionWithDuration = {
       ...composition,
-      durationInFrames: Math.round(totalDurationSeconds * composition.fps),
+      durationInFrames: Math.round(totalVideoSeconds * composition.fps),
     };
 
     // Render the video
