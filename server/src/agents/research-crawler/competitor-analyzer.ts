@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import type { CompetitorVideo } from '@shared/schemas';
 
 /**
@@ -7,6 +8,7 @@ import type { CompetitorVideo } from '@shared/schemas';
 export async function analyzeCompetitors(
   query: string,
   apiKey: string,
+  logger?: Logger,
 ): Promise<CompetitorVideo[]> {
   try {
     const params = new URLSearchParams({
@@ -22,6 +24,7 @@ export async function analyzeCompetitors(
     );
 
     if (!response.ok) {
+      logger?.warn({ query, status: response.status }, 'YouTube competitor API returned non-OK status');
       return [];
     }
 
@@ -49,7 +52,8 @@ export async function analyzeCompetitors(
       publishedAt: item.snippet.publishedAt,
       gaps: identifyGaps(item.snippet.description),
     }));
-  } catch {
+  } catch (err) {
+    logger?.warn({ query, err }, 'Competitor analysis failed');
     return [];
   }
 }

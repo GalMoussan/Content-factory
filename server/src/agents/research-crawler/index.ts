@@ -43,14 +43,14 @@ export class ResearchCrawlerAgent extends BaseAgent<ScoredTopicList, ResearchDos
     ctx.logger.info({ topicId: topic.id, title: topic.title }, 'Selected top topic');
 
     // Step 2: Scrape source URLs
-    const scrapedResults = await scrapeUrls(topic.sources);
+    const scrapedResults = await scrapeUrls(topic.sources, undefined, ctx.logger);
     const scrapedSources = scrapedResults.filter(
       (s): s is NonNullable<typeof s> => s !== null,
     );
     ctx.logger.info({ scraped: scrapedSources.length, total: topic.sources.length }, 'Scraping complete');
 
     // Step 3: Analyze competitor videos
-    const competitors = await analyzeCompetitors(topic.title, youtubeApiKey);
+    const competitors = await analyzeCompetitors(topic.title, youtubeApiKey, ctx.logger);
     ctx.logger.info({ competitors: competitors.length }, 'Competitor analysis complete');
 
     // Step 4: Build the research dossier

@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import type { ResearchSource } from '@shared/schemas';
 
 const ALLOWED_PROTOCOLS = new Set(['https:', 'http:']);
@@ -56,6 +57,7 @@ function extractFromHtml(html: string): { title: string; paragraphs: string[] } 
 export async function scrapeWebPage(
   url: string,
   browser?: { newPage: () => Promise<any> },
+  logger?: Logger,
 ): Promise<ScrapedPage | null> {
   // If a Playwright browser is provided, use it
   if (browser) {
@@ -69,7 +71,8 @@ export async function scrapeWebPage(
         headings: Array.from(document.querySelectorAll('h1,h2,h3')).map((h: any) => h.textContent ?? ''),
       }));
       return { url, title, paragraphs };
-    } catch {
+    } catch (err) {
+      logger?.warn({ url, err }, 'Playwright scrape failed');
       return null;
     } finally {
       if (page) {
@@ -90,6 +93,7 @@ export async function scrapeWebPage(
     });
 
     if (!response.ok) {
+      logger?.warn({ url, status: response.status }, 'Web scrape returned non-OK status');
       return null;
     }
 
@@ -97,7 +101,8 @@ export async function scrapeWebPage(
     const { title, paragraphs } = extractFromHtml(html);
 
     return { url, title, paragraphs };
-  } catch {
+  } catch (err) {
+    logger?.warn({ url, err }, 'Web scrape fetch failed');
     return null;
   }
 }
@@ -109,6 +114,7 @@ export async function scrapeWebPage(
 export async function scrapeUrls(
   urls: readonly string[],
   browser?: { newPage: () => Promise<any>; close: () => Promise<void> },
+  logger?: Logger,
 ): Promise<(ResearchSource | null)[]> {
   const results: (ResearchSource | null)[] = [];
 
@@ -118,7 +124,7 @@ export async function scrapeUrls(
       continue;
     }
 
-    const page = await scrapeWebPage(url, browser ?? undefined);
+    const page = await scrapeWebPage(url, browser ?? undefined, logger);
     if (page) {
       results.push({
         url: page.url,

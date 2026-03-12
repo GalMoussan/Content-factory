@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import { XMLParser } from 'fast-xml-parser';
 import { RSS_FEEDS } from './config.js';
 
@@ -41,7 +42,7 @@ export function parseRssFeed(xml: string): readonly RssItem[] {
  * Fetch and parse a single RSS feed URL.
  * Returns an empty array on failure (graceful degradation).
  */
-async function fetchSingleFeed(feedUrl: string): Promise<readonly RssItem[]> {
+async function fetchSingleFeed(feedUrl: string, logger?: Logger): Promise<readonly RssItem[]> {
   try {
     const response = await fetch(feedUrl, {
       headers: { 'User-Agent': 'ContentFactory/1.0' },
@@ -49,12 +50,14 @@ async function fetchSingleFeed(feedUrl: string): Promise<readonly RssItem[]> {
     });
 
     if (!response.ok) {
+      logger?.warn({ feedUrl, status: response.status }, 'RSS feed returned non-OK status');
       return [];
     }
 
     const xml = await response.text();
     return parseRssFeed(xml);
-  } catch {
+  } catch (err) {
+    logger?.warn({ feedUrl, err }, 'RSS feed fetch failed');
     return [];
   }
 }
@@ -63,9 +66,9 @@ async function fetchSingleFeed(feedUrl: string): Promise<readonly RssItem[]> {
  * Fetch all configured RSS feeds in parallel.
  * Gracefully degrades: failed feeds are silently skipped.
  */
-export async function fetchRssFeeds(): Promise<readonly RssItem[]> {
+export async function fetchRssFeeds(logger?: Logger): Promise<readonly RssItem[]> {
   const results = await Promise.allSettled(
-    RSS_FEEDS.map((url) => fetchSingleFeed(url)),
+    RSS_FEEDS.map((url) => fetchSingleFeed(url, logger)),
   );
 
   const items: RssItem[] = [];

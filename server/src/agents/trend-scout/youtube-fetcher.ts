@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import { YOUTUBE_QUERIES } from './config.js';
 
 export interface YouTubeVideo {
@@ -15,8 +16,10 @@ export interface YouTubeVideo {
 export async function fetchYouTubeTrends(
   query: string,
   apiKey: string,
+  logger?: Logger,
 ): Promise<readonly YouTubeVideo[]> {
   if (!apiKey) {
+    logger?.warn('YouTube API key not set, skipping YouTube trends');
     return [];
   }
 
@@ -36,6 +39,7 @@ export async function fetchYouTubeTrends(
     );
 
     if (!response.ok) {
+      logger?.warn({ query, status: response.status }, 'YouTube API returned non-OK status');
       return [];
     }
 
@@ -61,7 +65,8 @@ export async function fetchYouTubeTrends(
     }));
 
     return videos;
-  } catch {
+  } catch (err) {
+    logger?.warn({ query, err }, 'YouTube trends fetch failed');
     return [];
   }
 }
@@ -70,15 +75,16 @@ export async function fetchYouTubeTrends(
  * Fetch YouTube trends for all configured queries in parallel.
  * Gracefully degrades: failed queries are silently skipped.
  */
-export async function fetchAllYouTubeTrends(): Promise<readonly YouTubeVideo[]> {
+export async function fetchAllYouTubeTrends(logger?: Logger): Promise<readonly YouTubeVideo[]> {
   const apiKey = process.env.YOUTUBE_API_KEY ?? '';
 
   if (!apiKey) {
+    logger?.warn('YouTube API key not set, skipping all YouTube trends');
     return [];
   }
 
   const results = await Promise.allSettled(
-    YOUTUBE_QUERIES.map((q) => fetchYouTubeTrends(q, apiKey)),
+    YOUTUBE_QUERIES.map((q) => fetchYouTubeTrends(q, apiKey, logger)),
   );
 
   const videos: YouTubeVideo[] = [];

@@ -31,9 +31,9 @@ export class TrendScoutAgent extends BaseAgent<null, ScoredTopicList> {
 
     // Fetch from all sources in parallel with graceful degradation
     const [rssResult, redditResult, youtubeResult] = await Promise.allSettled([
-      fetchRssFeeds(),
-      fetchAllSubreddits(),
-      fetchAllYouTubeTrends(),
+      fetchRssFeeds(ctx.logger),
+      fetchAllSubreddits(ctx.logger),
+      fetchAllYouTubeTrends(ctx.logger),
     ]);
 
     const rssItems =

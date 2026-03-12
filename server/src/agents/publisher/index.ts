@@ -118,8 +118,8 @@ export class PublisherAgent extends BaseAgent<QAResult, PublishRecord> {
           null,
           record.publishedAt,
         );
-    } catch {
-      ctx.logger.error({ err: 'Failed to write publish_log row' });
+    } catch (err) {
+      ctx.logger.error({ err }, 'Failed to write publish_log row');
     }
   }
 }

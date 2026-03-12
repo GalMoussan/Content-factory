@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import { SUBREDDITS, REDDIT_USER_AGENT } from './config.js';
 
 export interface RedditPost {
@@ -11,7 +12,7 @@ export interface RedditPost {
  * Fetch hot posts from a single subreddit using the public JSON API.
  * Returns an empty array on failure (graceful degradation).
  */
-export async function fetchRedditPosts(subreddit: string): Promise<readonly RedditPost[]> {
+export async function fetchRedditPosts(subreddit: string, logger?: Logger): Promise<readonly RedditPost[]> {
   try {
     const response = await fetch(
       `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`,
@@ -22,6 +23,7 @@ export async function fetchRedditPosts(subreddit: string): Promise<readonly Redd
     );
 
     if (!response.ok) {
+      logger?.warn({ subreddit, status: response.status }, 'Reddit API returned non-OK status');
       return [];
     }
 
@@ -47,18 +49,19 @@ export async function fetchRedditPosts(subreddit: string): Promise<readonly Redd
     }));
 
     return posts;
-  } catch {
+  } catch (err) {
+    logger?.warn({ subreddit, err }, 'Reddit fetch failed');
     return [];
   }
 }
 
 /**
  * Fetch posts from all configured subreddits in parallel.
- * Gracefully degrades: failed subreddits are silently skipped.
+ * Gracefully degrades: failed subreddits are logged and skipped.
  */
-export async function fetchAllSubreddits(): Promise<readonly RedditPost[]> {
+export async function fetchAllSubreddits(logger?: Logger): Promise<readonly RedditPost[]> {
   const results = await Promise.allSettled(
-    SUBREDDITS.map((sub) => fetchRedditPosts(sub)),
+    SUBREDDITS.map((sub) => fetchRedditPosts(sub, logger)),
   );
 
   const posts: RedditPost[] = [];
