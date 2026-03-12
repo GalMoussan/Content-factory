@@ -18,12 +18,17 @@ export async function generateScript(
 ): Promise<ScriptResult> {
   const client = new Anthropic({ apiKey: claudeApiKey });
 
-  const systemPrompt = `You are a YouTube scriptwriter for an AI/Tech channel.
+  const systemPrompt = `You are a YouTube scriptwriter for a developer tips & tricks channel hosted by an enthusiastic Indian developer.
+The tone is friendly, practical, and energetic — like a senior dev sharing shortcuts with a colleague over chai.
+Use simple, clear English. Avoid jargon walls. Favor concrete examples and "here's what you do" phrasing.
+
 Given research data, produce a structured video script as JSON with:
 - sections: array of { type, content, durationSeconds } where type is one of: hook, intro, body, examples, cta, outro
-- title: YouTube-optimized title (max 100 chars)
+- title: YouTube-optimized title (max 100 chars) — use power words like "hack", "trick", "shortcut", "instantly"
 - description: YouTube description
 - tags: array of relevant tags
+
+The hook should open with a relatable developer pain point. The body and examples should focus on actionable steps the viewer can use immediately. Keep it conversational, not lecture-style.
 
 Respond ONLY with valid JSON matching this structure.`;
 

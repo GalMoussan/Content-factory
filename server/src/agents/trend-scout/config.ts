@@ -1,21 +1,21 @@
 // TrendScout configuration constants
 
 export const RSS_FEEDS = [
-  'https://feeds.feedburner.com/oreilly/radar',
-  'https://blog.google/technology/ai/rss/',
-  'https://openai.com/blog/rss/',
+  'https://dev.to/feed',
+  'https://css-tricks.com/feed/',
+  'https://blog.codepen.io/feed/',
 ] as const;
 
 export const SUBREDDITS = [
-  'MachineLearning',
-  'artificial',
-  'LocalLLaMA',
+  'webdev',
+  'programming',
+  'reactjs',
 ] as const;
 
 export const YOUTUBE_QUERIES = [
-  'AI news this week',
-  'machine learning tutorial',
-  'large language models',
+  'developer productivity hacks',
+  'coding tips and tricks 2026',
+  'web development shortcuts',
 ] as const;
 
 export const SCORING_WEIGHTS = {

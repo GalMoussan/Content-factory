@@ -96,7 +96,7 @@ export const TitleCard: React.FC<TitleCardProps> = ({ title }) => {
           letterSpacing: 2,
         }}
       >
-        AI / TECH
+        DEV HACKS
       </div>
     </AbsoluteFill>
   );
